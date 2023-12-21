@@ -1,24 +1,42 @@
-# Исследование вредоносной активности в домене Windows
-Розанцева Елизавета БИСО-03-20
+Информационно-аналитические технологии поиска угроз информационной
+безопасности
+================
+Rozanseva Elizaveta
 
-## Цель работы
+Лабораторная работа №6
+
+## Цель
 
 1.  Закрепить навыки исследования данных журнала Windows Active
     Directory
-
 2.  Изучить структуру журнала системы Windows Active Directory
-
 3.  Зекрепить практические навыки использования языка программирования R
     для обработки данных
-
 4.  Закрепить знания основных функций обработки данных экосистемы
     tidyverse языка R
 
-## Ход работы
+## Исходные данные
+
+1.  ОС Windows 11
+2.  RStudio Desktop
+3.  Интерпретатор языка R 4.2.2
+4.  dplyr
+
+## План
+
+1.  Установить пакет ‘dplyr’
+2.  Импорт и подготовка данных
+3.  Анализ данных
+
+## Шаги
+
+### Установка пакетов
 
 ``` r
 library(dplyr)
 ```
+
+    Warning: пакет 'dplyr' был собран под R версии 4.2.3
 
 
     Присоединяю пакет: 'dplyr'
@@ -32,31 +50,41 @@ library(dplyr)
         intersect, setdiff, setequal, union
 
 ``` r
+library(jsonlite)
+```
+
+``` r
+library(tidyr)
+```
+
+    Warning: пакет 'tidyr' был собран под R версии 4.2.3
+
+``` r
 library(xml2)
 ```
 
-    Warning: пакет 'xml2' был собран под R версии 4.3.2
+    Warning: пакет 'xml2' был собран под R версии 4.2.3
 
 ``` r
 library(rvest)
 ```
 
-    Warning: пакет 'rvest' был собран под R версии 4.3.2
+    Warning: пакет 'rvest' был собран под R версии 4.2.3
+
+### Импорт и подготовка данных DNS
+
+#### 1. Импортируйте данные в R
 
 ``` r
-library(jsonlite)
-library(tidyr)
-```
+url <- "https://storage.yandexcloud.net/iamcth-data/dataset.tar.gz"
 
-    Warning: пакет 'tidyr' был собран под R версии 4.3.2
+download.file(url, destfile = tf <- tempfile(fileext = ".tar.gz"), mode = "wb")
 
-### Подготовка данных
+temp_dir <- tempdir()
+untar(tf, exdir = temp_dir)
 
-1.  Импортируйте данные в R. Это можно выполнить с помощью
-    jsonlite::stream_in(file()).
-
-``` r
-data <- stream_in(file("C:\\Users\\Asus\\Downloads\\dataset.tar\\dataset\\caldera_attack_evals_round1_day1_2019-10-20201108.json"))
+json_files <- list.files(temp_dir, pattern="\\.json$", full.names = TRUE, recursive = TRUE)
+data <- stream_in(file(json_files))
 ```
 
     opening file input connection.
@@ -270,17 +298,18 @@ data <- stream_in(file("C:\\Users\\Asus\\Downloads\\dataset.tar\\dataset\\calder
 
     closing file input connection.
 
-1.  Привести датасеты в вид “аккуратных данных”, преобразовать типы
-    столбцов в соответствии с типом данных
+#### 2. Привести датасеты в вид “аккуратных данных”, преобразовать типы столбцов в соответствии с типом данных
 
 ``` r
-data <- data %>% mutate(`@timestamp` = as.POSIXct(`@timestamp`, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC")) %>%rename(timestamp = `@timestamp`, metadata = `@metadata`)
+data <- data %>%
+  mutate(`@timestamp` = as.POSIXct(`@timestamp`, format = "%Y-%m-%dT%H:%M:%OSZ", tz = "UTC")) %>%
+  rename(timestamp = `@timestamp`, metadata = `@metadata`)
 ```
 
-1.  Просмотрите общую структуру данных с помощью функции glimpse()
+#### 3. Просмотрите общую структуру данных с помощью функции glimpse()
 
 ``` r
-glimpse(data)
+data %>% glimpse
 ```
 
     Rows: 101,904
@@ -295,18 +324,15 @@ glimpse(data)
     $ host      <df[,1]> <data.frame[26 x 1]>
     $ agent     <df[,5]> <data.frame[26 x 5]>
 
-### Анализ
+### Анализ данных
 
-1.  Раскройте датафрейм избавившись от вложенных датафреймов. Для
-    обнаружения таких можно использовать функцию dplyr::glimpse() , а
-    для раскрытия вложенности – tidyr::unnest() . Обратите внимание, что
-    при раскрытии теряются внешние названия колонок – это можно
-    предотвратить если использовать параметр tidyr::unnest(…, names_sep
-    = ).
+#### 1. Раскройте датафрейм избавившись от вложенных датафреймов. Для обнаружения таких можно использовать функцию dplyr::glimpse() , а для раскрытия вложенности – tidyr::unnest() . Обратите внимание, что при раскрытии теряются внешние названия колонок – это можно предотвратить если использовать параметр tidyr::unnest(…, names_sep = ).
 
 ``` r
-data <- data %>% unnest(c(metadata, event, log, winlog, ecs, host, agent), names_sep = ".")
-glimpse(data)
+data_unnested <- data %>%
+  unnest(c(metadata, event, log, winlog, ecs, host, agent), names_sep = ".")
+
+data_unnested %>% glimpse
 ```
 
     Rows: 101,904
@@ -346,12 +372,15 @@ glimpse(data)
     $ agent.version        <chr> "7.4.0", "7.4.0", "7.4.0", "7.4.0", "7.4.0", "7.4…
     $ agent.type           <chr> "winlogbeat", "winlogbeat", "winlogbeat", "winlog…
 
-1.  Минимизируйте количество колонок в датафрейме – уберите колоки с
-    единственным значением параметра.
+#### 2. Минимизируйте количество колонок в датафрейме – уберите колоки с единственным значением параметра.
 
 ``` r
-data <- subset(data, select = - c(metadata.beat, metadata.type,metadata.version,metadata.topic,event.kind,winlog.api,agent.ephemeral_id,agent.hostname,agent.id,agent.version,agent.type))
-data %>% glimpse()
+data_clear <- data_unnested %>%
+  select(-metadata.beat, -metadata.type, -metadata.version, -metadata.topic, 
+         -event.kind, -winlog.api, -agent.ephemeral_id, -agent.hostname, 
+         -agent.id, -agent.version, -agent.type)
+
+data_clear %>% glimpse
 ```
 
     Rows: 101,904
@@ -380,10 +409,12 @@ data %>% glimpse()
     $ ecs.version          <chr> "1.1.0", "1.1.0", "1.1.0", "1.1.0", "1.1.0", "1.1…
     $ host.name            <chr> "WECServer", "WECServer", "WECServer", "WECSer…
 
-1.  Какое количество хостов представлено в данном датасете?
+#### 3. Какое количество хостов представлено в данном датасете?
 
 ``` r
-data %>% select(host.name) %>% unique()
+data_clear %>%
+  select(host.name) %>%
+  unique
 ```
 
     # A tibble: 1 × 1
@@ -391,27 +422,44 @@ data %>% select(host.name) %>% unique()
       <chr>    
     1 WECServer
 
-1.  Подготовьте датафрейм с расшифровкой Windows Event_ID, приведите
-    типы данных к типу их значений.
+#### 4. Подготовьте датафрейм с расшифровкой Windows Event_ID, приведите типы данных к типу их значений.
 
 ``` r
 webpage_url <- "https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/appendix-l--events-to-monitor"
-webpage <- read_html(webpage_url)
-events <- html_table(webpage)[[1]]
-events <- events %>% rename(Current_Windows_Event_ID = `Current Windows Event ID`, Legacy_Windows_Event_ID = `Legacy Windows Event ID`, Potential_Criticality = `Potential Criticality`, Event_Summary = `Event Summary`)
-events$Current_Windows_Event_ID <- as.integer(events$Current_Windows_Event_ID)
+webpage <- xml2::read_html(webpage_url)
+event_df <- rvest::html_table(webpage)[[1]]
+
+event_df %>% glimpse
 ```
 
-    Warning: в результате преобразования созданы NA
+    Rows: 381
+    Columns: 4
+    $ `Current Windows Event ID` <chr> "4618", "4649", "4719", "4765", "4766", "47…
+    $ `Legacy Windows Event ID`  <chr> "N/A", "N/A", "612", "N/A", "N/A", "N/A", "…
+    $ `Potential Criticality`    <chr> "High", "High", "High", "High", "High", "Hi…
+    $ `Event Summary`            <chr> "A monitored security event pattern has occ…
+
+Подготовим данные:
 
 ``` r
-events$Legacy_Windows_Event_ID <- as.integer(events$Legacy_Windows_Event_ID)
+event_df <- event_df %>%
+  mutate_at(vars(`Current Windows Event ID`, `Legacy Windows Event ID`), as.integer) %>%
+  rename(c(Current_Windows_Event_ID = `Current Windows Event ID`, 
+           Legacy_Windows_Event_ID = `Legacy Windows Event ID`, 
+           Potential_Criticality = `Potential Criticality`, 
+           Event_Summary = `Event Summary`))
 ```
 
-    Warning: в результате преобразования созданы NA
+    Warning: There were 2 warnings in `mutate()`.
+    The first warning was:
+    ℹ In argument: `Current Windows Event ID = .Primitive("as.integer")(`Current
+      Windows Event ID`)`.
+    Caused by warning:
+    ! в результате преобразования созданы NA
+    ℹ Run `dplyr::last_dplyr_warnings()` to see the 1 remaining warning.
 
 ``` r
-glimpse(events)
+event_df %>% glimpse
 ```
 
     Rows: 381
@@ -421,21 +469,32 @@ glimpse(events)
     $ Potential_Criticality    <chr> "High", "High", "High", "High", "High", "High…
     $ Event_Summary            <chr> "A monitored security event pattern has occur…
 
-1.  Есть ли в логе события с высоким и средним уровнем значимости?
-    Сколько их?
+#### 5. Есть ли в логе события с высоким и средним уровнем значимости? Сколько их?
 
 ``` r
-events %>% select(Potential_Criticality) %>% filter(Potential_Criticality == 'High' | Potential_Criticality == 'Medium') %>% group_by(Potential_Criticality) %>% count()
+event_df %>% 
+  group_by(Potential_Criticality) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count))
 ```
 
-    # A tibble: 2 × 2
-    # Groups:   Potential_Criticality [2]
-      Potential_Criticality     n
+    # A tibble: 4 × 2
+      Potential_Criticality count
       <chr>                 <int>
-    1 High                      9
+    1 Low                     291
     2 Medium                   79
+    3 High                      9
+    4 Medium to High            2
+
+Количество событий со средним уровнем значимости: 79 Количество событий
+с высоким уровнем значимости: 9
+
+## Оценка результата
+
+В результате лабораторной работы были выполнены задания по анализу
+данных трафика Wi-Fi сетей
 
 ## Вывод
 
-Используя программный пакет dplyr языка программирования R был проведен
-анализ журналов.
+В ходе лабораторной работы были импортированы, подготовлены,
+проанализированы данные трафика Wi-Fi сетей
